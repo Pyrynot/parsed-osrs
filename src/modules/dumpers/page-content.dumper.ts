@@ -100,6 +100,12 @@ export class PageContentDumper {
     }
     const result = response.parse as WikiPageResponse;
 
+    // The page title contains some HTML title tag for some reason: Removing for clarity
+    result.displaytitle = result.displaytitle
+      .replaceAll(/<.*?>/g, '')
+      .replace(/&#(\d+);/g, function (match, dec) {
+        return String.fromCharCode(dec);
+      });
     const newPage: WikiPageWithContent = {
       pageid: pageId,
       pagename: result.title,
