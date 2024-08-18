@@ -1,3 +1,15 @@
+## Fork description
+
+This is a fork for personal use, to add the following features to **page-content-dumper.ts**:
+
+- rate limiting and retry mechanism (some pages were not downloaded due to 429 errors)
+- a check to not download a file if it already exists
+- enhanced logging
+
+
+
+# ORIGINAL README.md:
+
 # Wiki Scraper
 
 Project to download all of the wiki page, and extract a lot of metadata from it.

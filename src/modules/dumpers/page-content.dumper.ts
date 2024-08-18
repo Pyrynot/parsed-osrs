@@ -23,6 +23,8 @@ interface WikiPageResponse {
 @Injectable()
 export class PageContentDumper {
   private logger = new Logger(PageContentDumper.name);
+  private readonly maxRetries = 5;
+  private readonly delayBetweenRetries = 3000; // 3 seconds
 
   constructor(
     private PageListDumper: PageListDumper,
@@ -57,21 +59,45 @@ export class PageContentDumper {
   }
 
   async dumpWikiPageById(pageId: number) {
+    const filePath = this.getPathFromPageId(pageId);
+    if (existsSync(filePath)) {
+      this.logger.log(`Page ${pageId} already exists, skipping.`);
+      return;
+    }
+
     const redirects = this.WikiRequestService.getRedirectsToPage(pageId);
     let response;
-    try {
-      response = await this.WikiRequestService.query<{
-        parse: WikiPageResponse;
-      }>({
-        action: 'parse',
-        pageid: pageId.toString(),
-        format: 'json',
-        prop: 'properties|wikitext|displaytitle|subtitle|revid|text',
-      }).catch((e) => this.logger.error(e));
-    } catch (e) {
-      this.logger.error(e);
+    let attempt = 0;
+
+    while (attempt < this.maxRetries) {
+      try {
+        response = await this.WikiRequestService.query<{
+          parse: WikiPageResponse;
+        }>({
+          action: 'parse',
+          pageid: pageId.toString(),
+          format: 'json',
+          prop: 'properties|wikitext|displaytitle|subtitle|revid|text',
+        });
+
+        if (response) break; // Exit the loop if request is successful
+
+      } catch (e) {
+        if (e.response?.status === 429) {
+          attempt++;
+          this.logger.warn(`Rate limit exceeded, retrying in ${this.delayBetweenRetries}ms...`);
+          await delay(this.delayBetweenRetries);
+        } else {
+          this.logger.error(e);
+          return;
+        }
+      }
     }
-    if (!response) return;
+
+    if (!response) {
+      this.logger.error(`Failed to fetch page ${pageId} after ${this.maxRetries} attempts`);
+      return;
+    }
     const result = response.parse as WikiPageResponse;
 
     const newPage: WikiPageWithContent = {
@@ -111,4 +137,8 @@ export class PageContentDumper {
   private getPathFromPageId(pageId: number): string {
     return `${WIKI_PAGES_FOLDER}/${pageId}.json`;
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
